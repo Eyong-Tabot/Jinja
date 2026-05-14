@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RoomDecor - Accra</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    @keyframes fadeInUp { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
+    .animate-fade-in-up { animation: fadeInUp 0.5s ease-out; }
+    .card-hover:hover { transform: translateY(-8px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); transition: all 0.3s; }
+    .nav-scroll { background: rgba(0,0,0,0.95); backdrop-filter: blur(8px); }
+  </style>
+</head>
+<body class="bg-black text-white font-sans">
+
+  <!-- Navigation -->
+  <nav id="navbar" class="fixed w-full z-50 transition-all duration-300 bg-black">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="text-2xl font-bold">
+        <span id="logo-container" class="bg-gradient-to-r from-navy to-white bg-clip-text text-transparent">RoomDecor</span>
+        <img id="logo-img" class="h-10 hidden" alt="Logo">
+      </div>
+      <div class="flex items-center space-x-6">
+        <a href="#" onclick="showPage('home')" class="hover:text-[#0A192F] transition">Home</a>
+        <a href="#" onclick="showPage('shop')" class="hover:text-[#0A192F] transition">Shop</a>
+        <a href="#" id="adminLink" class="hidden hover:text-[#0A192F] transition" onclick="showPage('adminPanel')">Admin</a>
+        <div class="relative">
+          <button onclick="toggleCurrencyDropdown()" class="bg-[#0A192F]/20 px-3 py-2 rounded-lg flex items-center space-x-2">
+            <i class="fas fa-dollar-sign text-[#0A192F]"></i>
+            <span id="currencyCode">USD</span>
+            <i class="fas fa-chevron-down text-xs"></i>
+          </button>
+          <div id="currencyDropdown" class="absolute right-0 mt-2 w-48 bg-gray-900 border border-[#0A192F] rounded-lg hidden z-50">
+            <!-- currencies will be filled by JS -->
+          </div>
+        </div>
+        <button onclick="showCart()" class="relative">
+          <i class="fas fa-shopping-cart text-xl"></i>
+          <span id="cartCount" class="absolute -top-2 -right-2 bg-[#0A192F] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">0</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div id="app" class="pt-20 min-h-screen"></div>
+
+  <!-- Cart Sidebar -->
+  <div id="cartSidebar" class="fixed top-0 right-0 w-full md:w-96 h-full bg-gray-900 shadow-2xl transform translate-x-full transition-transform duration-300 z-50">
+    <div class="p-6 h-full flex flex-col">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold">Your Cart</h2>
+        <button onclick="closeCart()" class="text-2xl">&times;</button>
+      </div>
+      <div id="cartItems" class="flex-1 overflow-y-auto space-y-4"></div>
+      <div class="border-t border-gray-700 pt-4 mt-4">
+        <div class="flex justify-between text-xl font-bold mb-4">
+          <span>Total</span>
+          <span id="cartTotal">$0.00</span>
+        </div>
+        <button onclick="whatsappBuy()" class="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-semibold transition">Buy via WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Modal (for add/edit product) -->
+  <div id="adminModal" class="fixed inset-0 bg-black/80 items-center justify-center z-50 hidden">
+    <div class="bg-gray-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+      <div class="flex justify-between mb-4"><h2 class="text-2xl font-bold" id="modalTitle">Add Product</h2><button onclick="closeAdminModal()">&times;</button></div>
+      <form id="productForm" enctype="multipart/form-data">
+        <input type="text" id="productName" placeholder="Name" class="w-full mb-3 p-3 bg-black rounded" required>
+        <textarea id="productDesc" placeholder="Description" rows="3" class="w-full mb-3 p-3 bg-black rounded" required></textarea>
+        <input type="number" step="0.01" id="productPrice" placeholder="Price (USD)" class="w-full mb-3 p-3 bg-black rounded" required>
+        <select id="productCategory" class="w-full mb-3 p-3 bg-black rounded">
+          <option>Wall Art</option><option>Lighting</option><option>Cushions</option><option>Vases</option><option>Rugs</option><option>Mirrors</option><option>Plants</option><option>Other</option>
+        </select>
+        <label class="flex items-center mb-3"><input type="checkbox" id="productInStock" checked> In Stock</label>
+        <div id="existingImagesContainer" class="flex flex-wrap gap-2 mb-3"></div>
+        <input type="file" id="productImages" multiple accept="image/*" class="mb-3">
+        <button type="submit" class="bg-[#0A192F] w-full py-3 rounded-lg font-semibold">Save Product</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ---------- GLOBAL VARIABLES ----------
+    let API_URL = window.location.origin + '/api';
+    let cartId = localStorage.getItem('cartId') || crypto.randomUUID();
+    localStorage.setItem('cartId', cartId);
+    let cart = { items: [] };
+    let products = [];
+    let categories = [];
+    let exchangeRates = { USD: 1 };
+    let selectedCurrency = { code: 'USD', symbol: '$' };
+    let adminToken = localStorage.getItem('adminToken');
+    let logoUrl = null;
+    let currentPage = 'home';
+    let editingProductId = null;
+
+    // ---------- HELPER FUNCTIONS ----------
+    async function fetchRates() {
+      try {
+        const res = await axios.get('https://api.exchangerate-api.com/v4/latest/USD');
+        exchangeRates = res.data.rates;
+      } catch(e) { console.error(e); }
+    }
+    function convertPrice(usd) { return usd * (exchangeRates[selectedCurrency.code] || 1); }
+    function formatPrice(usd) {
+      let val = convertPrice(usd);
+      if (selectedCurrency.code === 'JPY') return selectedCurrency.symbol + Math.round(val);
+      return selectedCurrency.symbol + val.toFixed(2);
+    }
+    async function fetchProducts(page = 1, category = 'all', search = '') {
+      const url = `${API_URL}/products?page=${page}&category=${category}&search=${search}`;
+      const res = await axios.get(url);
+      products = res.data.products;
+      renderShop(products, res.data.currentPage, res.data.totalPages, category, search);
+    }
+    async function fetchCategories() { const res = await axios.get(`${API_URL}/categories`); categories = res.data; }
+    async function fetchCart() { const res = await axios.get(`${API_URL}/cart/${cartId}`); cart = res.data; updateCartUI(); }
+    async function addToCart(productId, qty=1) { await axios.post(`${API_URL}/cart/${cartId}/items`, { productId, quantity: qty }); fetchCart(); }
+    async function updateCartItem(productId, qty) { await axios.put(`${API_URL}/cart/${cartId}/items/${productId}`, { quantity: qty }); fetchCart(); }
+    async function removeCartItem(productId) { await axios.delete(`${API_URL}/cart/${cartId}/items/${productId}`); fetchCart(); }
+    async function clearCart() { await axios.delete(`${API_URL}/cart/${cartId}`); fetchCart(); }
+    function updateCartUI() {
+      const count = cart.items.reduce((s,i)=>s+i.quantity,0);
+      document.getElementById('cartCount').innerText = count;
+      const container = document.getElementById('cartItems');
+      if (!cart.items.length) { container.innerHTML = '<p class="text-gray-400">Cart is empty</p>'; document.getElementById('cartTotal').innerText = formatPrice(0); return; }
+      let html = '', total = 0;
+      cart.items.forEach(item => {
+        const p = item.productId;
+        total += p.priceUSD * item.quantity;
+        html += `<div class="flex gap-3 border-b border-gray-700 pb-3">
+          <img src="${p.images[0]}" class="w-16 h-16 object-cover rounded">
+          <div class="flex-1"><div class="font-semibold">${p.name}</div><div>${formatPrice(p.priceUSD)}</div>
+          <div class="flex items-center gap-2 mt-1"><button onclick="updateCartItem('${p._id}',${item.quantity-1})" class="px-2 bg-gray-700 rounded">-</button>
+          <span>${item.quantity}</span><button onclick="updateCartItem('${p._id}',${item.quantity+1})" class="px-2 bg-gray-700 rounded">+</button>
+          <button onclick="removeCartItem('${p._id}')" class="text-red-500 ml-2"><i class="fas fa-trash"></i></button></div></div></div>`;
+      });
+      container.innerHTML = html;
+      document.getElementById('cartTotal').innerHTML = formatPrice(total);
+    }
+    function showCart() { document.getElementById('cartSidebar').classList.remove('translate-x-full'); }
+    function closeCart() { document.getElementById('cartSidebar').classList.add('translate-x-full'); }
+    async function whatsappBuy() {
+      if (!cart.items.length) return alert('Cart empty');
+      let msg = "🛍️ *My RoomDecor Order*%0A";
+      cart.items.forEach((item, idx) => {
+        msg += `${idx+1}. ${item.productId.name} x${item.quantity} - ${formatPrice(item.productId.priceUSD * item.quantity)}%0A`;
+      });
+      msg += `%0A*Total: ${formatPrice(cart.items.reduce((t,i)=>t+i.productId.priceUSD*i.quantity,0))}*%0ALocation: Accra, Ghana`;
+      window.open(`https://wa.me/${import.meta?.env?.VITE_WHATSAPP_PHONE || '233200000000'}?text=${msg}`, '_blank');
+    }
+
+    // Currency dropdown
+    const currencies = [
+      { code: 'USD', symbol: '$' }, { code: 'EUR', symbol: '€' }, { code: 'GBP', symbol: '£' },
+      { code: 'GHS', symbol: '₵' }, { code: 'NGN', symbol: '₦' }, { code: 'CAD', symbol: 'C$' },
+      { code: 'AUD', symbol: 'A$' }, { code: 'JPY', symbol: '¥' }
+    ];
+    function toggleCurrencyDropdown() { document.getElementById('currencyDropdown').classList.toggle('hidden'); }
+    function setCurrency(currency) {
+      selectedCurrency = currency;
+      document.getElementById('currencyCode').innerText = currency.code;
+      document.getElementById('currencyDropdown').classList.add('hidden');
+      rerenderCurrentPage();
+      updateCartUI();
+    }
+    function rerenderCurrentPage() { if (currentPage === 'home') showHome(); else if (currentPage === 'shop') fetchProducts(); else if (currentPage === 'adminPanel' && adminToken) loadAdminProducts(); }
+
+    // Page rendering
+    function showHome() {
+      currentPage = 'home';
+      document.getElementById('app').innerHTML = `
+        <div class="relative h-screen flex items-center justify-center overflow-hidden">
+          <div class="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-transparent z-10"></div>
+          <div class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?q=80&w=2070')] bg-cover bg-center"></div>
+          <div class="container mx-auto px-4 relative z-20 text-center md:text-left">
+            <h1 class="text-5xl md:text-7xl font-bold mb-6 animate-fade-in-up">Transform Your Space<br><span class="text-[#0A192F]">with Style</span></h1>
+            <p class="text-xl text-gray-300 mb-8 max-w-2xl">Premium room decoration items from Accra to the world.</p>
+            <button onclick="showPage('shop')" class="bg-[#0A192F] text-white px-8 py-4 rounded-lg text-lg font-semibold hover:scale-105 transition">Shop Now</button>
+          </div>
+        </div>
+        <div class="py-20 bg-black text-center"><h2 class="text-3xl font-bold">Featured Products</h2><div class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-10 px-4" id="featuredGrid"></div></div>
+      `;
+      // load first 4 products
+      axios.get(`${API_URL}/products?page=1&limit=4`).then(res => {
+        let html = '';
+        res.data.products.forEach(p => {
+          html += `<div class="bg-gray-900 rounded-xl overflow-hidden card-hover"><img src="${p.images[0]}" class="h-48 w-full object-cover"><div class="p-4"><h3 class="font-bold">${p.name}</h3><div class="text-[#0A192F] text-xl">${formatPrice(p.priceUSD)}</div><button onclick="addToCart('${p._id}')" class="mt-2 w-full bg-[#0A192F] py-2 rounded">Add to Cart</button></div></div>`;
+        });
+        document.getElementById('featuredGrid').innerHTML = html;
+      });
+    }
+
+    function showShop() {
+      currentPage = 'shop';
+      document.getElementById('app').innerHTML = `
+        <div class="container mx-auto px-4 py-8">
+          <h1 class="text-3xl font-bold mb-6">Our Collection</h1>
+          <div class="flex flex-wrap gap-4 mb-6">
+            <input type="text" id="searchInput" placeholder="Search..." class="bg-gray-800 px-4 py-2 rounded flex-1">
+            <select id="categoryFilter" class="bg-gray-800 px-4 py-2 rounded"></select>
+          </div>
+          <div id="productsGrid" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+          <div id="pagination" class="flex justify-center mt-8 gap-2"></div>
+        </div>
+      `;
+      fetchCategories().then(() => {
+        let catHtml = '<option value="all">All Categories</option>';
+        categories.forEach(c => catHtml += `<option value="${c}">${c}</option>`);
+        document.getElementById('categoryFilter').innerHTML = catHtml;
+        document.getElementById('categoryFilter').onchange = () => fetchProducts(1, document.getElementById('categoryFilter').value, document.getElementById('searchInput').value);
+        document.getElementById('searchInput').onkeyup = () => fetchProducts(1, document.getElementById('categoryFilter').value, document.getElementById('searchInput').value);
+        fetchProducts(1);
+      });
+    }
+    function renderShop(prods, page, totalPages, cat, search) {
+      const grid = document.getElementById('productsGrid');
+      if (!grid) return;
+      let html = '';
+      prods.forEach(p => {
+        html += `<div class="bg-gray-900 rounded-xl overflow-hidden card-hover"><img src="${p.images[0]}" class="h-56 w-full object-cover"><div class="p-4"><div class="text-sm text-[#0A192F]">${p.category}</div><h3 class="font-bold text-lg">${p.name}</h3><div class="text-[#0A192F] text-xl font-bold mt-1">${formatPrice(p.priceUSD)}</div><button onclick="addToCart('${p._id}')" class="mt-3 w-full bg-[#0A192F] py-2 rounded transition hover:bg-opacity-80">Add to Cart</button></div></div>`;
+      });
+      grid.innerHTML = html;
+      let pagHtml = '';
+      for (let i=1; i<=totalPages; i++) {
+        pagHtml += `<button onclick="fetchProducts(${i},'${cat}','${search}')" class="px-3 py-1 rounded ${i===page?'bg-[#0A192F]':'bg-gray-800'}">${i}</button>`;
+      }
+      document.getElementById('pagination').innerHTML = pagHtml;
+    }
+
+    // Admin panel functions
+    async function adminLogin(email, password) {
+      try {
+        const res = await axios.post(`${API_URL}/admin/login`, { email, password });
+        adminToken = res.data.token;
+        localStorage.setItem('adminToken', adminToken);
+        document.getElementById('adminLink').classList.remove('hidden');
+        showPage('adminPanel');
+        loadAdminProducts();
+      } catch(e) { alert('Login failed'); }
+    }
+    async function loadAdminProducts() {
+      if (!adminToken) return;
+      const res = await axios.get(`${API_URL}/admin/products`, { headers: { Authorization: `Bearer ${adminToken}` } });
+      const productsList = res.data;
+      let html = `<div class="flex justify-between"><h2 class="text-2xl font-bold">Products</h2><button onclick="openProductModal()" class="bg-[#0A192F] px-4 py-2 rounded">+ Add Product</button></div><div class="grid gap-3 mt-6">`;
+      productsList.forEach(p => {
+        html += `<div class="bg-gray-800 p-4 rounded flex justify-between items-center"><div><img src="${p.images[0]}" class="w-12 h-12 inline mr-3 object-cover"><span>${p.name}</span> <span class="text-gray-400 ml-2">$${p.priceUSD}</span></div><div><button onclick="openProductModal('${p._id}')" class="text-blue-400 mr-3">Edit</button><button onclick="deleteProduct('${p._id}')" class="text-red-400">Delete</button></div></div>`;
+      });
+      html += `</div><div class="mt-8"><h3 class="text-xl font-bold">Site Logo</h3><input type="file" id="logoUpload" accept="image/*"><button onclick="uploadLogo()" class="bg-[#0A192F] mt-2 px-4 py-2 rounded">Upload Logo</button></div>`;
+      document.getElementById('app').innerHTML = html;
+    }
+    async function deleteProduct(id) {
+      if (!confirm('Delete?')) return;
+      await axios.delete(`${API_URL}/admin/products/${id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+      loadAdminProducts();
+    }
+    function openProductModal(productId = null) {
+      editingProductId = productId;
+      document.getElementById('modalTitle').innerText = productId ? 'Edit Product' : 'Add Product';
+      document.getElementById('existingImagesContainer').innerHTML = '';
+      document.getElementById('productForm').reset();
+      if (productId) {
+        axios.get(`${API_URL}/products/${productId}`).then(res => {
+          const p = res.data;
+          document.getElementById('productName').value = p.name;
+          document.getElementById('productDesc').value = p.description;
+          document.getElementById('productPrice').value = p.priceUSD;
+          document.getElementById('productCategory').value = p.category;
+          document.getElementById('productInStock').checked = p.inStock;
+          let imgsHtml = '';
+          p.images.forEach((img, idx) => {
+            imgsHtml += `<div class="relative"><img src="${img}" class="w-16 h-16 object-cover"><button type="button" onclick="removeExistingImage(${idx})" class="absolute -top-2 -right-2 bg-red-500 rounded-full w-5 h-5 text-xs">x</button></div>`;
+          });
+          document.getElementById('existingImagesContainer').innerHTML = imgsHtml;
+          window.existingImages = p.images;
+        });
+      } else { window.existingImages = []; }
+      document.getElementById('adminModal').classList.remove('hidden');
+    }
+    function closeAdminModal() { document.getElementById('adminModal').classList.add('hidden'); editingProductId = null; }
+    function removeExistingImage(idx) { window.existingImages.splice(idx,1); openProductModal(editingProductId); }
+    document.getElementById('productForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData();
+      formData.append('name', document.getElementById('productName').value);
+      formData.append('description', document.getElementById('productDesc').value);
+      formData.append('priceUSD', document.getElementById('productPrice').value);
+      formData.append('category', document.getElementById('productCategory').value);
+      formData.append('inStock', document.getElementById('productInStock').checked);
+      formData.append('stockQuantity', 999);
+      if (window.existingImages) formData.append('existingImages', JSON.stringify(window.existingImages));
+      const files = document.getElementById('productImages').files;
+      for (let f of files) formData.append('images', f);
+      const url = editingProductId ? `${API_URL}/admin/products/${editingProductId}` : `${API_URL}/admin/products`;
+      const method = editingProductId ? 'put' : 'post';
+      await axios[method](url, formData, { headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'multipart/form-data' } });
+      closeAdminModal();
+      loadAdminProducts();
+    });
+    async function uploadLogo() {
+      const file = document.getElementById('logoUpload').files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('logo', file);
+      await axios.post(`${API_URL}/admin/logo`, formData, { headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'multipart/form-data' } });
+      alert('Logo updated');
+      fetchSettings();
+    }
+    async function fetchSettings() {
+      const res = await axios.get(`${API_URL}/settings`);
+      if (res.data.logoUrl) {
+        logoUrl = res.data.logoUrl;
+        document.getElementById('logo-img').src = logoUrl;
+        document.getElementById('logo-img').classList.remove('hidden');
+        document.getElementById('logo-container').classList.add('hidden');
+      }
+    }
+    function showPage(page) {
+      if (page === 'home') showHome();
+      else if (page === 'shop') showShop();
+      else if (page === 'adminPanel') {
+        if (!adminToken) {
+          document.getElementById('app').innerHTML = `
+            <div class="max-w-md mx-auto mt-20 bg-gray-900 p-8 rounded-xl"><h2 class="text-2xl font-bold mb-4">Admin Login</h2><input id="adminEmail" class="w-full p-3 mb-3 bg-black rounded" placeholder="Email"><input id="adminPass" type="password" class="w-full p-3 mb-3 bg-black rounded" placeholder="Password"><button onclick="adminLogin(document.getElementById('adminEmail').value,document.getElementById('adminPass').value)" class="w-full bg-[#0A192F] py-3 rounded">Login</button></div>
+          `;
+        } else loadAdminProducts();
+      }
+    }
+
+    // Initialize
+    (async () => {
+      await fetchRates();
+      await fetchSettings();
+      await fetchCart();
+      showHome();
+      setInterval(fetchRates, 3600000);
+      if (localStorage.getItem('adminToken')) adminToken = localStorage.getItem('adminToken');
+      if (adminToken) document.getElementById('adminLink').classList.remove('hidden');
+      // fill currency dropdown
+      let currHtml = '';
+      currencies.forEach(c => { currHtml += `<button onclick="setCurrency({code:'${c.code}',symbol:'${c.symbol}'})" class="block w-full text-left px-4 py-2 hover:bg-[#0A192F]/30">${c.code} - ${c.name}</button>`; });
+      document.getElementById('currencyDropdown').innerHTML = currHtml;
+    })();
+  </script>
+</body>
+</html>
