@@ -15,9 +15,7 @@
     .animate-fade-in-up { animation: fadeInUp 0.5s ease-out; }
     .card-hover { transition: all 0.3s; }
     .card-hover:hover { transform: translateY(-8px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-    .toast {
-      transition: transform 0.3s ease, opacity 0.3s ease;
-    }
+    .toast { transition: transform 0.3s ease, opacity 0.3s ease; }
   </style>
 </head>
 <body class="bg-black text-white font-sans">
@@ -25,14 +23,15 @@
   <!-- navigation -->
   <nav id="navbar" class="fixed w-full z-50 transition-all duration-300 bg-black shadow-lg">
     <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-      <div class="text-2xl font-bold cursor-pointer" onclick="showPage('home')">
+      <!-- Logo area - BIGGER -->
+      <div class="text-3xl md:text-4xl font-bold cursor-pointer flex items-center" onclick="showPage('home')">
         <span id="logoText" class="bg-gradient-to-r from-[#0A192F] to-white bg-clip-text text-transparent">Jinja</span>
-        <img id="logoImg" class="h-10 hidden" alt="Jinja Logo">
+        <img id="logoImg" class="h-14 md:h-16 hidden object-contain" alt="Jinja Logo">
       </div>
       <div class="flex items-center space-x-4 md:space-x-6">
         <a href="#" onclick="showPage('home')" class="hover:text-[#0A192F] transition text-sm md:text-base">Home</a>
         <a href="#" onclick="showPage('shop')" class="hover:text-[#0A192F] transition text-sm md:text-base">Shop</a>
-        <a href="#" onclick="showPage('adminLogin')" class="hover:text-[#0A192F] transition text-sm md:text-base">Admin</a>
+        <!-- Admin button is HIDDEN from normal users. Access via #admin in URL -->
         <div class="relative">
           <button onclick="toggleCurrencyDropdown()" class="bg-[#0A192F]/20 px-2 md:px-3 py-2 rounded-lg flex items-center space-x-2 text-sm">
             <i class="fas fa-dollar-sign text-[#0A192F]"></i>
@@ -118,13 +117,13 @@
     let logoUrl = null;
     let currentPage = 'home';
     let editingProductId = null;
+    let isAdminLoggedIn = false;
 
     // ---------- TOAST & NOTIFICATION ----------
     function showNewProductToast() {
       const toast = document.getElementById('newProductToast');
       toast.classList.remove('translate-y-20', 'opacity-0');
       toast.classList.add('translate-y-0', 'opacity-100');
-      // auto hide after 8 seconds
       setTimeout(() => hideToast(), 8000);
     }
     function hideToast() {
@@ -133,26 +132,22 @@
       toast.classList.remove('translate-y-0', 'opacity-100');
     }
 
-    // Check for new products (compares current product count with stored count)
     function checkForNewProducts(showImmediate = true) {
       const currentCount = products.length;
       const lastCount = parseInt(localStorage.getItem(STORAGE.productCount) || '0');
       if (currentCount > lastCount && showImmediate) {
         showNewProductToast();
       }
-      // always update stored count to avoid repeated notifications
       localStorage.setItem(STORAGE.productCount, currentCount);
     }
 
-    // Listen for product changes from other tabs (admin adding product in another tab)
     window.addEventListener('storage', (e) => {
       if (e.key === STORAGE.products) {
-        // Reload products from storage and check
         const newProducts = JSON.parse(e.newValue);
         if (newProducts && newProducts.length > products.length) {
           products = newProducts;
           checkForNewProducts(true);
-          rerenderCurrentPage(); // update UI if needed
+          rerenderCurrentPage();
           updateCartUI();
         } else {
           products = newProducts;
@@ -164,12 +159,10 @@
 
     // ---------- INITIALIZATION ----------
     function loadData() {
-      // load products
       const storedProducts = localStorage.getItem(STORAGE.products);
       if (storedProducts) {
         products = JSON.parse(storedProducts);
       } else {
-        // default sample products for Jinja
         products = [
           { id: '1', name: 'Abstract Wall Art', description: 'Modern canvas print', priceUSD: 49.99, category: 'Wall Art', images: ['https://picsum.photos/id/101/400/400'], inStock: true },
           { id: '2', name: 'Velvet Cushion', description: 'Soft navy blue', priceUSD: 29.99, category: 'Cushions', images: ['https://picsum.photos/id/20/400/400'], inStock: true },
@@ -177,14 +170,11 @@
         ];
         saveProducts();
       }
-      // initialize product count in storage (first time)
       if (!localStorage.getItem(STORAGE.productCount)) {
         localStorage.setItem(STORAGE.productCount, products.length);
       } else {
-        // check if new products were added while user was away
         checkForNewProducts(true);
       }
-      // load logo
       logoUrl = localStorage.getItem(STORAGE.logo);
       if (logoUrl) {
         document.getElementById('logoImg').src = logoUrl;
@@ -193,7 +183,6 @@
       } else {
         document.getElementById('logoText').classList.remove('hidden');
       }
-      // load cart
       const storedCart = localStorage.getItem(STORAGE.cart);
       if (storedCart) cart = JSON.parse(storedCart);
       else cart = { items: [] };
@@ -202,7 +191,6 @@
 
     function saveProducts() {
       localStorage.setItem(STORAGE.products, JSON.stringify(products));
-      // update product count after saving
       localStorage.setItem(STORAGE.productCount, products.length);
     }
 
@@ -350,7 +338,7 @@
       grid.innerHTML = html || '<p class="text-gray-400 col-span-full text-center">No products found</p>';
     }
 
-    // ---------- ADMIN ----------
+    // ---------- ADMIN (hidden access via #admin in URL) ----------
     function showAdminLogin() {
       currentPage = 'adminLogin';
       document.getElementById('app').innerHTML = `
@@ -365,13 +353,20 @@
     function verifyAdmin() {
       const pass = document.getElementById('adminPassInput').value;
       if (pass === 'admin123') {
+        isAdminLoggedIn = true;
         showAdminPanel();
+        // Remove #admin from URL without reloading
+        history.pushState("", document.title, window.location.pathname);
       } else {
         alert('Wrong password');
       }
     }
 
     function showAdminPanel() {
+      if (!isAdminLoggedIn) {
+        showAdminLogin();
+        return;
+      }
       currentPage = 'adminPanel';
       let html = `<div class="container mx-auto px-4 py-8"><div class="flex justify-between items-center mb-6"><h1 class="text-3xl font-bold">Admin Panel</h1><button onclick="openProductModal()" class="bg-[#0A192F] px-4 py-2 rounded">+ Add Product</button></div>`;
       html += `<div class="grid gap-3">`;
@@ -442,9 +437,7 @@
           const newId = Date.now().toString();
           products.push({ id: newId, name, description, priceUSD, category, images, inStock });
         }
-        saveProducts(); // this updates product count and triggers storage event
-        // After saving, show toast to admin (and any other tabs will get storage event)
-        // For immediate feedback, show toast on current window as well
+        saveProducts();
         showNewProductToast();
         closeAdminModal();
         showAdminPanel();
@@ -482,18 +475,22 @@
     function showPage(page) {
       if (page === 'home') showHome();
       else if (page === 'shop') showShop();
-      else if (page === 'adminLogin') showAdminLogin();
       else if (page === 'adminPanel') {
-        const pass = prompt('Admin password:');
-        if (pass === 'admin123') showAdminPanel();
-        else if (pass !== null) alert('Wrong password');
-        else showHome();
+        if (isAdminLoggedIn) {
+          showAdminPanel();
+        } else {
+          showAdminLogin();
+        }
       }
     }
 
-    // ---------- PERIODIC CHECK FOR NEW PRODUCTS (every 30 sec) ----------
+    // Check URL hash for #admin access
+    if (window.location.hash === '#admin') {
+      showAdminLogin();
+    }
+
+    // Periodic check for new products
     setInterval(() => {
-      // Reload products from storage (in case another tab changed them)
       const stored = localStorage.getItem(STORAGE.products);
       if (stored) {
         const newProducts = JSON.parse(stored);
@@ -506,7 +503,7 @@
       }
     }, 30000);
 
-    // ---------- BOOTSTRAP ----------
+    // Bootstrap
     loadData();
     fetchRates().then(() => {
       setInterval(fetchRates, 3600000);
