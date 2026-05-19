@@ -153,7 +153,7 @@
         msg += `${idx+1}. ${item.productId.name} x${item.quantity} - ${formatPrice(item.productId.priceUSD * item.quantity)}%0A`;
       });
       msg += `%0A*Total: ${formatPrice(cart.items.reduce((t,i)=>t+i.productId.priceUSD*i.quantity,0))}*%0ALocation: Accra, Ghana`;
-      window.open(`https://wa.me/${import.meta?.env?.VITE_WHATSAPP_PHONE || '233200000000'}?text=${msg}`, '_blank');
+      window.open(`https://wa.me/233546311518?text=${msg}`, '_blank');
     }
 
     // Currency dropdown
