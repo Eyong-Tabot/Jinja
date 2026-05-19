@@ -31,7 +31,8 @@
       <div class="flex items-center space-x-4 md:space-x-6">
         <a href="#" onclick="showPage('home')" class="hover:text-[#0A192F] transition text-sm md:text-base">Home</a>
         <a href="#" onclick="showPage('shop')" class="hover:text-[#0A192F] transition text-sm md:text-base">Shop</a>
-        <!-- Admin button is HIDDEN from normal users. Access via #admin in URL -->
+        <!-- Admin button: present but hidden (class="hidden"). Shown only after admin login. -->
+        <a href="#" id="adminNavBtn" onclick="showPage('adminPanel')" class="hover:text-[#0A192F] transition text-sm md:text-base hidden">Admin</a>
         <div class="relative">
           <button onclick="toggleCurrencyDropdown()" class="bg-[#0A192F]/20 px-2 md:px-3 py-2 rounded-lg flex items-center space-x-2 text-sm">
             <i class="fas fa-dollar-sign text-[#0A192F]"></i>
@@ -99,6 +100,11 @@
     <button id="refreshBtn" onclick="window.location.reload()" class="bg-white text-[#0A192F] px-3 py-1 rounded-md text-sm font-semibold">Refresh</button>
     <button onclick="hideToast()" class="text-gray-300 hover:text-white">&times;</button>
   </div>
+
+  <!-- Discreet admin login link in footer -->
+  <footer class="fixed bottom-2 right-2 z-40">
+    <a href="#" onclick="showAdminLogin(); return false;" class="text-gray-700 text-xs hover:text-gray-400 transition" title="Admin Login">⚙️</a>
+  </footer>
 
   <script>
     // ---------- STORAGE KEYS ----------
@@ -269,7 +275,8 @@
         if (p) msg += `${idx+1}. ${p.name} x${item.quantity} - ${formatPrice(p.priceUSD * item.quantity)}%0A`;
       });
       msg += `%0A*Total: ${formatPrice(cart.items.reduce((t,i)=> { const p = products.find(pr=>pr.id===i.productId); return t + (p ? p.priceUSD*i.quantity : 0); },0))}*%0ALocation: Accra, Ghana`;
-      window.open(`https://wa.me/233546311518?text=${msg}`, '_blank');
+      // Updated WhatsApp number
+      window.open(`https://wa.me/237671332423?text=${msg}`, '_blank');
     }
 
     // ---------- RENDER PAGES ----------
@@ -338,7 +345,7 @@
       grid.innerHTML = html || '<p class="text-gray-400 col-span-full text-center">No products found</p>';
     }
 
-    // ---------- ADMIN (hidden access via #admin in URL) ----------
+    // ---------- ADMIN (button hidden, login via footer link) ----------
     function showAdminLogin() {
       currentPage = 'adminLogin';
       document.getElementById('app').innerHTML = `
@@ -354,9 +361,9 @@
       const pass = document.getElementById('adminPassInput').value;
       if (pass === 'admin123') {
         isAdminLoggedIn = true;
+        // Show the hidden admin button in the navigation
+        document.getElementById('adminNavBtn').classList.remove('hidden');
         showAdminPanel();
-        // Remove #admin from URL without reloading
-        history.pushState("", document.title, window.location.pathname);
       } else {
         alert('Wrong password');
       }
@@ -482,11 +489,6 @@
           showAdminLogin();
         }
       }
-    }
-
-    // Check URL hash for #admin access
-    if (window.location.hash === '#admin') {
-      showAdminLogin();
     }
 
     // Periodic check for new products
